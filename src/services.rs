@@ -3,6 +3,7 @@ use crate::models::{AppState, Task};
 use crate::error::MyError;
 use std::fs;
 use validator::Validate;
+use log::{info, warn, error};
 
 const FILE_PATH: &str = "tasks.json";
 
@@ -31,7 +32,10 @@ pub async fn add_task(
 
     let mut tasks = data.tasks.lock().map_err(|_| MyError::LockError)?;
 
+    info!("Adding a new task with ID: {}", item.id);
+
     if tasks.iter().any(|t| t.id == item.id) {
+        warn!("Failed to add task: ID {} already exists", item.id);
         return Err(MyError::DuplicateTask { id: item.id })
     }
 
