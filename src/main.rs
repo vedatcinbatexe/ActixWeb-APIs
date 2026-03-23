@@ -1,4 +1,4 @@
-use actix_web::{get, post, web, App, HttpServer, Responder, HttpResponse, ResponseError, error};
+use actix_web::{get, delete, post, web, App, HttpServer, Responder, HttpResponse, ResponseError, error};
 use serde::{Serialize, Deserialize};
 use std::sync::Mutex;
 use std::fmt;
@@ -60,6 +60,25 @@ async fn add_task(
     Ok(HttpResponse::Created().body("Task added!"))
 }
 
+#[delete("/tasks/{id}")]
+async fn delete_task(
+    path: web::Path<u32>,
+    data: web::Data<AppState>
+) -> Result<impl Responder, MyError> {
+    let target_id = path.into_inner();
+    let mut tasks = data.tasks.lock().map_err(|_| MyError::LockError)?;
+
+    let initial_len = tasks.len();
+
+    tasks.retain(|task| task.id != target_id);
+
+    if tasks.len() == initial_len {
+        return Ok(HttpResponse::NotFound().body(format!("No task found with ID {}", target_id)));
+    }
+
+    Ok(HttpResponse::Ok().body(format!("Task {} deleted", target_id)))
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let app_data = web::Data::new(AppState {
@@ -80,6 +99,7 @@ async fn main() -> std::io::Result<()> {
             }))
             .service(list_tasks)
             .service(add_task)
+            .service(delete_task)
     })
     .bind(("127.0.0.1", 8080))?
     .run()
