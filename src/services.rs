@@ -2,6 +2,7 @@ use actix_web::{get, post, put, delete, web, HttpResponse, Responder};
 use crate::models::{AppState, Task};
 use crate::error::MyError;
 use std::fs;
+use validator::Validate;
 
 const FILE_PATH: &str = "tasks.json";
 
@@ -26,6 +27,8 @@ pub async fn add_task(
     item: web::Json<Task>,
     data: web::Data<AppState>
 ) -> Result<impl Responder, MyError> {
+    item.0.validate().map_err(|e| MyError::ValidationError(e.to_string()))?;
+
     let mut tasks = data.tasks.lock().map_err(|_| MyError::LockError)?;
 
     if tasks.iter().any(|t| t.id == item.id) {
@@ -59,6 +62,8 @@ pub async fn update_task(
     item: web::Json<Task>,
     data: web::Data<AppState>
 ) -> Result<impl Responder, MyError> {
+    item.0.validate().map_err(|e| MyError::ValidationError(e.to_string()))?;
+
     let target_id = path.into_inner();
     let mut tasks = data.tasks.lock().map_err(|_| MyError::LockError)?;
 

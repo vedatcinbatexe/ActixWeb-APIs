@@ -10,7 +10,6 @@ use std::fs;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    // Initial load from file
     let initial_tasks: Vec<models::Task> = if let Ok(data) = fs::read_to_string("tasks.json") {
         serde_json::from_str(&data).unwrap_or_else(|_| vec![])
     } else {
