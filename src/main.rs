@@ -35,6 +35,7 @@ async fn main() -> std::io::Result<()> {
             .service(services::list_tasks)
             .service(services::add_task)
             .service(services::delete_task)
+            .service(services::update_task)
     })
     .bind(("127.0.0.1", 8080))?
     .run()

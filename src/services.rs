@@ -1,4 +1,4 @@
-use actix_web::{get, post, delete, web, HttpResponse, Responder};
+use actix_web::{get, post, put, delete, web, HttpResponse, Responder};
 use crate::models::{AppState, Task};
 use crate::error::MyError;
 use std::fs;
@@ -51,4 +51,26 @@ pub async fn delete_task(
     save_to_disk(&tasks)?; // PERSISTS
 
     Ok(HttpResponse::Ok().body("Task deleted and updated on disk"))
+}
+
+#[put("/tasks/{id}")]
+pub async fn update_task(
+    path: web::Path<u32>,
+    item: web::Json<Task>,
+    data: web::Data<AppState>
+) -> Result<impl Responder, MyError> {
+    let target_id = path.into_inner();
+    let mut tasks = data.tasks.lock().map_err(|_| MyError::LockError)?;
+
+    let index = tasks.iter().position(|t| t.id == target_id);
+
+    if let Some(i) = index {
+        tasks[i].description = item.description.clone();
+        
+        save_to_disk(&tasks)?;
+
+        Ok(HttpResponse::Ok().json(tasks[i].clone()))
+    } else {
+        Ok(HttpResponse::NotFound().body(format!("Task {} not found", target_id)))
+    }
 }
