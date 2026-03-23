@@ -1,89 +1,24 @@
-use actix_web::{get, delete, post, web, App, HttpServer, Responder, HttpResponse, ResponseError, error};
-use serde::{Serialize, Deserialize};
+mod models;
+mod services;
+mod error;
+
+// Change your imports to this:
+use actix_web::{web, App, HttpServer, HttpResponse};
+use actix_web::error::InternalError; // Import this specifically to avoid collision
 use std::sync::Mutex;
-use std::fmt;
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-struct Task {
-    id: u32,
-    description: String,
-}
-
-struct AppState {
-    app_name: String,
-    tasks: Mutex<Vec<Task>>,
-}
-
-#[derive(Debug)]
-enum MyError {
-    DuplicateTask { id: u32 },
-    LockError,
-}
-
-impl fmt::Display for MyError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            MyError::DuplicateTask { id } => write!(f, "Task with ID {} already exists", id),
-            MyError::LockError => write!(f, "Internal error: Could not lock database"),
-        }
-    }
-}
-
-impl ResponseError for MyError {
-    fn error_response(&self) -> HttpResponse {
-        match self {
-            MyError::DuplicateTask { .. } => HttpResponse::Conflict().json(self.to_string()),
-            MyError::LockError => HttpResponse::InternalServerError().json(self.to_string()),
-        }
-    }
-}
-
-
-#[get("/tasks")]
-async fn list_tasks(data: web::Data<AppState>) -> impl Responder {
-    let tasks = data.tasks.lock().unwrap();
-    web::Json(tasks.to_vec())
-}
-
-#[post("/add-task")]
-async fn add_task(
-    item: web::Json<Task>, 
-    data: web::Data<AppState>
-) -> Result<impl Responder, MyError> {
-    let mut tasks = data.tasks.lock().map_err(|_| MyError::LockError)?;
-
-    if tasks.iter().any(|t| t.id == item.id) {
-        return Err(MyError::DuplicateTask { id: item.id });
-    }
-
-    tasks.push(item.0);
-    Ok(HttpResponse::Created().body("Task added!"))
-}
-
-#[delete("/tasks/{id}")]
-async fn delete_task(
-    path: web::Path<u32>,
-    data: web::Data<AppState>
-) -> Result<impl Responder, MyError> {
-    let target_id = path.into_inner();
-    let mut tasks = data.tasks.lock().map_err(|_| MyError::LockError)?;
-
-    let initial_len = tasks.len();
-
-    tasks.retain(|task| task.id != target_id);
-
-    if tasks.len() == initial_len {
-        return Ok(HttpResponse::NotFound().body(format!("No task found with ID {}", target_id)));
-    }
-
-    Ok(HttpResponse::Ok().body(format!("Task {} deleted", target_id)))
-}
+use std::fs;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let app_data = web::Data::new(AppState {
-        app_name: String::from("Actix-Learn-2026"),
-        tasks: Mutex::new(vec![]),
+    // Initial load from file
+    let initial_tasks: Vec<models::Task> = if let Ok(data) = fs::read_to_string("tasks.json") {
+        serde_json::from_str(&data).unwrap_or_else(|_| vec![])
+    } else {
+        vec![]
+    };
+
+    let app_data = web::Data::new(models::AppState {
+        tasks: Mutex::new(initial_tasks),
     });
 
     println!("Server running at http://127.0.0.1:8080");
@@ -91,15 +26,15 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .app_data(app_data.clone())
-            .app_data(web::JsonConfig::default().error_handler(|err, _req| {
-                error::InternalError::from_response(
+            .app_data(web::JsonConfig::default().error_handler(|err, _| {
+                InternalError::from_response(
                     err,
                     HttpResponse::BadRequest().json("Invalid JSON format!")
                 ).into()
             }))
-            .service(list_tasks)
-            .service(add_task)
-            .service(delete_task)
+            .service(services::list_tasks)
+            .service(services::add_task)
+            .service(services::delete_task)
     })
     .bind(("127.0.0.1", 8080))?
     .run()
